@@ -106,29 +106,36 @@ class CPU:
 
     def run(self):
         """Run the CPU."""
-        #instruction definitions
-        HLT = 0b00000001
-        LDI = 0b10000010
-        PRN = 0b01000111
-        MUL = 0b10100010
-        #run code
+
+        #instruction functions - "ignore" arguments are passed to get rid of positional argument errors
+
+        def HLT(ignore1, ignore2):
+            print('shutting down...')
+            self.running = False
+
+        def LDI(regID, data):
+            self.reg[regID] = data
+            self.pc += 3
+        
+        def PRN(regID, ignore):
+            print(self.reg[regID])
+            self.pc += 2
+
+        def MUL(regID1, regID2):
+            self.alu('MUL', regID1, regID2)
+            self.pc += 3
+
+        branchDict = {
+            '1': HLT,
+            '130': LDI,
+            '71': PRN,
+            '162': MUL,
+        }
+
         while self.running:
             ir = self.ram_read(self.pc)
             operand_a = self.ram_read(self.pc+1)
             operand_b = self.ram_read(self.pc+2)
-            if ir == HLT:
-                print('shutting down...')
-                self.running = False
-            elif ir == LDI:
-                self.reg[operand_a] = operand_b
-                self.pc += 3
-            elif ir == PRN:
-                print(self.reg[operand_a])
-                self.pc += 2
-            elif ir == MUL:
-                self.alu('MUL', operand_a, operand_b )
-                self.pc += 3
-            else:
-                print('invalid instruction')
-                self.pc += 1
+
+            branchDict[str(ir)](operand_a, operand_b)
 
