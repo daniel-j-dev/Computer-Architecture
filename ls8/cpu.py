@@ -8,9 +8,13 @@ class CPU:
     def __init__(self):
         """Construct a new CPU."""
         self.running = True
-        self.pc = 0
-        self.ram = [None]*256
-        self.reg = [None]*8
+        self.pc = 0 #Program Counter
+        self.ram = [None]*256 #RAM
+
+        self.reg = [None]*8 #Registries - R0 through R7
+        self.sp = 7 #Stack Pointer - defines which registry # is the stack pointer
+        self.reg[self.sp] = 244
+
         self.appsPath = './apps/'
 
     def load(self):
@@ -47,25 +51,6 @@ class CPU:
         except FileNotFoundError:
             print(f'File not found: {text}')
             sys.exit(2)
-
-        #address = 0
-
-        # For now, we've just hardcoded a program:
-
-        # program = [
-        #     # From print8.ls8
-        #     0b10000010, # LDI R0,8
-        #     0b00000000,
-        #     0b00001000,
-        #     0b01000111, # PRN R0
-        #     0b00000000,
-        #     0b00000001, # HLT
-        # ]
-
-        # for instruction in program:
-        #     self.ram[address] = instruction
-        #     address += 1
-
 
     def alu(self, op, reg_a, reg_b):
         """ALU operations."""
@@ -107,35 +92,62 @@ class CPU:
     def run(self):
         """Run the CPU."""
 
-        #instruction functions - "ignore" arguments are passed to get rid of positional argument errors
+        #instruction functions - "ignore" arguments are passed to get rid of positional argument errors; temporary fix
 
-        def HLT(ignore1, ignore2):
+        def HLT(ignore1, ignore2): #Halt PC
             print('shutting down...')
             self.running = False
 
-        def LDI(regID, data):
+        def LDI(regID, data): #Save data to registry # regID
             self.reg[regID] = data
             self.pc += 3
         
-        def PRN(regID, ignore):
+        def PRN(regID, ignore): #Print value in registry # regID
             print(self.reg[regID])
             self.pc += 2
 
-        def MUL(regID1, regID2):
+        def MUL(regID1, regID2): #Multiply two registries and save the value at registry # regID1
             self.alu('MUL', regID1, regID2)
             self.pc += 3
+        
+        def PSH(ignore1, ignore2): #Push to the stack
+            self.reg[self.sp] -= 1
+            reg_num = self.ram[self.pc + 1]
+            value = self.reg[reg_num]
+            tosa = self.reg[self.sp] #top of stack address
+            self.ram[tosa] = value
+
+            self.pc += 2
+
+        def POP(ignore1, ignore2): #Pop from the stack
+
+            reg_num = self.ram[self.pc+1]
+            tosa = self.reg[self.sp]
+            value = self.ram[tosa]
+
+            self.reg[reg_num] = value
+
+            self.reg[self.sp] += 1
+            self.pc += 2
 
         branchDict = {
             '1': HLT,
             '130': LDI,
             '71': PRN,
             '162': MUL,
+            '69': PSH,
+            '70': POP
         }
 
         while self.running:
-            ir = self.ram_read(self.pc)
-            operand_a = self.ram_read(self.pc+1)
-            operand_b = self.ram_read(self.pc+2)
 
-            branchDict[str(ir)](operand_a, operand_b)
+            try:
+                ir = self.ram_read(self.pc)
+                operand_a = self.ram_read(self.pc+1)
+                operand_b = self.ram_read(self.pc+2)
+
+                branchDict[str(ir)](operand_a, operand_b)
+            except: #assume incorrect instruction
+                self.pc += 1
+
 
