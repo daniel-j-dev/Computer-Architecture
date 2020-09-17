@@ -129,6 +129,18 @@ class CPU:
 
             self.reg[self.sp] += 1
             self.pc += 2
+        
+        def CALL(ignore1, ignore2): #needs work...
+            return_addr = self.pc + 2
+            
+            self.reg[self.sp] -= 1
+            tosa = self.reg[self.sp]
+            self.ram[tosa] = return_addr
+
+            reg_num = self.ram[pc + 1]
+            value = self.reg[reg_num]
+
+            self.pc = value
 
         branchDict = {
             '1': HLT,
@@ -136,7 +148,8 @@ class CPU:
             '71': PRN,
             '162': MUL,
             '69': PSH,
-            '70': POP
+            '70': POP,
+            '80': CALL
         }
 
         while self.running:
