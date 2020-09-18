@@ -10,10 +10,13 @@ class CPU:
         self.running = True
         self.pc = 0 #Program Counter
         self.ram = [None]*256 #RAM
+        self.flagg = 0 #flag register?
 
-        self.reg = [None]*8 #Registries - R0 through R7
+        self.reg = [0]*8 #Registries - R0 through R7
         self.sp = 7 #Stack Pointer - defines which registry # is the stack pointer
-        self.reg[self.sp] = 244
+        self.reg[self.sp] = 0
+
+        self.return_addr = 0
 
         self.appsPath = './apps/'
 
@@ -36,16 +39,18 @@ class CPU:
         try:
             with open(f'{self.appsPath}{text}') as f:
                 for line in f:
-                    if line == '':
+                    line_list = line.strip().split('#')
+                    clean_line = line_list[0]
+                    if clean_line == '':
                         continue
 
                     try:
-                        line = int(line, 2)
+                        clean_line = int(clean_line, 2)
                     except ValueError:
-                        print(f'Invalid instuction: {line} ')
+                        print(f'Invalid instuction: {clean_line} ')
                         sys.exit(1)
 
-                    self.ram_write(address, line)
+                    self.ram_write(address, clean_line)
                     address += 1
                     
         except FileNotFoundError:
@@ -60,6 +65,13 @@ class CPU:
         #elif op == "SUB": etc
         elif op == 'MUL':
             self.reg[reg_a] = self.reg[reg_a] * self.reg[reg_b]
+        elif op == "CMP":
+            if self.reg[reg_a] == self.reg[reg_b]:
+                self.flags = 0b00000001
+            elif self.reg[reg_a] > self.reg[reg_b]:
+                self.flags = 0b10000010
+            else:
+                self.flags = 0b00000100
         else:
             raise Exception("Unsupported ALU operation")
     
@@ -92,34 +104,46 @@ class CPU:
     def run(self):
         """Run the CPU."""
 
-        #instruction functions - "ignore" arguments are passed to get rid of positional argument errors; temporary fix
+        #instruction functions
 
-        def HLT(ignore1, ignore2): #Halt PC
-            print('shutting down...')
+        def HLT(): #Halt PC
+            print(f'shutting down... last program counter: {self.pc}')
             self.running = False
 
-        def LDI(regID, data): #Save data to registry # regID
+        def LDI(): #Save data to registry # regID
+            regID = self.ram_read(self.pc+1)
+            data = self.ram_read(self.pc+2)
             self.reg[regID] = data
             self.pc += 3
+
         
-        def PRN(regID, ignore): #Print value in registry # regID
+        def PRN(): #Print value in registry # regID
+            regID = self.ram_read(self.pc+1)
             print(self.reg[regID])
             self.pc += 2
+        
+        def ADD():
+            regID1 = self.ram_read(self.pc+1)
+            regID2 = self.ram_read(self.pc+2)
+            self.alu('ADD', regID1, regID2)
 
-        def MUL(regID1, regID2): #Multiply two registries and save the value at registry # regID1
+        def MUL(): #Multiply two registries and save the value at registry # regID1
+            regID1 = self.ram_read(self.pc+1)
+            regID2 = self.ram_read(self.pc+2)
             self.alu('MUL', regID1, regID2)
             self.pc += 3
         
-        def PSH(ignore1, ignore2): #Push to the stack
+        def PSH(): #Push to the stack
+            regID = self.ram_read(self.pc+1)
             self.reg[self.sp] -= 1
-            reg_num = self.ram[self.pc + 1]
-            value = self.reg[reg_num]
+            value = self.reg[regID]
             tosa = self.reg[self.sp] #top of stack address
             self.ram[tosa] = value
 
             self.pc += 2
 
-        def POP(ignore1, ignore2): #Pop from the stack
+
+        def POP(): #Pop from the stack
 
             reg_num = self.ram[self.pc+1]
             tosa = self.reg[self.sp]
@@ -129,18 +153,25 @@ class CPU:
 
             self.reg[self.sp] += 1
             self.pc += 2
-        
-        def CALL(ignore1, ignore2): #needs work...
-            return_addr = self.pc + 2
-            
-            self.reg[self.sp] -= 1
-            tosa = self.reg[self.sp]
-            self.ram[tosa] = return_addr
 
-            reg_num = self.ram[pc + 1]
-            value = self.reg[reg_num]
+        def CMP(): 
+            self.alu('CMP', self.ram[self.pc + 1], self.ram[self.pc + 2])
+            self.pc += 3
 
-            self.pc = value
+        def JNE():
+            if (self.flags & 0b00000001) == 0:
+                JMP()
+            else:
+                self.pc += 2
+
+        def JEQ():
+            if (self.flags & 0b00000001) == 1:
+                JMP()
+            else:
+                self.pc += 2
+
+        def JMP():
+            self.pc = self.reg[self.ram[self.pc + 1]]
 
         branchDict = {
             '1': HLT,
@@ -149,18 +180,22 @@ class CPU:
             '162': MUL,
             '69': PSH,
             '70': POP,
-            '80': CALL
+            '160': ADD,
+            '167': CMP,
+            '86': JNE,
+            '85': JEQ,
+            '84': JMP
+
         }
 
         while self.running:
 
             try:
                 ir = self.ram_read(self.pc)
-                operand_a = self.ram_read(self.pc+1)
-                operand_b = self.ram_read(self.pc+2)
 
-                branchDict[str(ir)](operand_a, operand_b)
+                branchDict[str(ir)]()
             except: #assume incorrect instruction
                 self.pc += 1
+                print(f'line skipped: {self.pc-1}')
 
 
